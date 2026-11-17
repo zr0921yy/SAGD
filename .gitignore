@@ -1,0 +1,17 @@
+# Local datasets (DOTA slices, AerialGaze-1.0, generated gaze density maps)
+data/
+
+# Training artifacts
+checkpoints/
+runs/
+outputs/
+*.pth
+*.pt
+*.log
+
+# IDE / agent temp
+.screenshots/
+
+# Python
+__pycache__/
+*.py[cod]
