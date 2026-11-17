@@ -133,14 +133,22 @@ python tools/convert_dota15_to_coco.py \
 > `data/` directory. Each experiment below states which generated directory it
 > expects; how to obtain/rebuild that directory is described here.
 
-The dataset itself is released separately (de-identified, CC BY 4.0 — link
-coming soon). Unpack it as:
+The dataset is released separately (de-identified, CC BY 4.0 — link coming soon).
+Unpack it next to the code. The release contains **eye-tracking records only**;
+no DOTA imagery is redistributed:
 
 ```
 AerialGaze-1.0/
-├── images/<class>/<tile>.jpg     # stimulus tiles on the official grid & naming
-├── annfiles/<class>/<tile>.txt   # DOTA-format labels of the stimulus tiles
-└── eye_data/**/*.json            # per-trial eye-tracking JSONs (layout-agnostic)
+├── README.md
+├── LICENSE                          # CC BY 4.0
+├── trials.csv                       # one row per trial: participant/task/class/stem/path
+├── stats.json                       # aggregate counts (trials, fixations, sessions)
+├── SHA256SUMS.txt                   # checksums of every file
+├── P001/
+│   ├── search/<class>/<stem>.json       # 1,800 target-search trials
+│   └── free_viewing/<stem>.json         # 200 free-viewing trials
+├── P002/
+└── P003/
 ```
 
 Each JSON carries a `meta` block (`participant` / `task` / `class` / `image`),
@@ -158,8 +166,8 @@ Tobii screen-based eye tracker (30 Hz sampling). The acquisition protocol was:
    in this work (bridge, court, ground track field, harborship, plane,
    roundabout, storage tank, swimming pool, vehicle).
 2. **Task** — target search: the participant searched the tile for instances of
-   the cued class. A free-viewing task was also recorded on a subset (184
-   tiles); the maps used by SAGD come from the *search* task, hence the
+   the cued class. A free-viewing task was also recorded on 200 tiles per
+   participant; the maps used by SAGD come from the *search* task, hence the
    `search/` task directory in `data/gaze_density/` (`gaze_task="search"` in the
    loader).
 3. **Participants** — 3 participants (P001, P002, P003); calibration was redone
@@ -175,13 +183,48 @@ Tobii screen-based eye tracker (30 Hz sampling). The acquisition protocol was:
 
 The training signal is **not** the fixation list itself but a Gaussian-splatted
 density map built from these JSONs with `tools/build_gaze_density.py` (§2.4).
-For the released recordings this yields 1,800 maps (9 classes × 200) from
-142,741 fixations.
+For the released recordings this yields 1,800 maps (9 classes × 200).
 
-#### 2.3 Merge gaze stimulus tiles into the detection training set
+#### 2.3 Rebuild the stimulus tiles and merge them into the detection train set
 
-The gaze tiles are usually not part of the standard DOTA train tiles; training
-needs their annotations so density maps can be matched by stem:
+The release ships no images, so first reconstruct the 1,800 search stimuli from
+your DOTA-1.5 split. `trials.csv` lists the required `class` and `stem` of every
+trial; save the snippet below as `make_stimuli.py` and run it once (it accepts
+both `<stem>.jpg` and the mmrotate name `<src>__1024__<x>___<y>.jpg`):
+
+```python
+import csv, re, shutil
+from pathlib import Path
+
+root  = Path("AerialGaze-1.0")
+split = Path("data/DOTA1.5_sliced/train")          # images/ + labelTxt/
+rows  = [r for r in csv.DictReader(open(root / "trials.csv", encoding="utf-8-sig"))
+         if r["task"] == "target_search"]
+
+missing = 0
+for r in rows:
+    stem = r["stem"]
+    m = re.match(r"(.+)__(\d+)___(\d+)$", stem)
+    names = [stem] + ([f"{m.group(1)}__1024__{m.group(2)}___{m.group(3)}"] if m else [])
+    img = next((split / "images" / f"{n}.jpg" for n in names
+                if (split / "images" / f"{n}.jpg").exists()), None)
+    lbl = next((split / "labelTxt" / f"{n}.txt" for n in names
+                if (split / "labelTxt" / f"{n}.txt").exists()), None)
+    if img is None or lbl is None:
+        missing += 1
+        continue
+    for sub, src, ext in (("images", img, ".jpg"), ("annfiles", lbl, ".txt")):
+        d = root / sub / r["class"]
+        d.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, d / f"{stem}{ext}")
+print("missing:", missing)
+```
+
+If tiles are absent from the standard train split, re-run the official split
+(§2.1 Option B) over the full DOTA-1.5; the stems encode the source image and
+top-left corner on the same 1024 / gap-200 grid.
+
+Then merge the reconstructed tiles into the detection COCO json (idempotent):
 
 ```bash
 python tools/merge_gaze_stimuli.py --gaze-root AerialGaze-1.0 \
@@ -193,17 +236,21 @@ python tools/merge_gaze_stimuli.py --gaze-root AerialGaze-1.0 \
 
 This is the step that creates the `data/gaze_density/` directory consumed by
 `GAZE_DIR`. The outputs are **not** committed to git, so run it once locally
-(or download the pre-built maps from the dataset release):
+after §2.3:
 
 ```bash
 python tools/build_gaze_density.py --src AerialGaze-1.0 \
     --out data/gaze_density \
     --coord-space pixel \
-    --images <stimulus image folder> \
+    --meta-task 1 \
+    --images AerialGaze-1.0/images \
     --coco-ann data/DOTA1.5_sliced/annotations/instances_train2017.json \
     --classes bridge court "ground track field" harborship plane roundabout \
               "storage tank" "swimming pool" vehicle
 ```
+
+`--meta-task 1` keeps only target-search trials; without it the free-viewing
+JSONs are rendered too and can collide with search maps on shared tile stems.
 
 The script is layout-agnostic (grouped by each JSON's `meta` fields), applies the
 training-time fusion protocol (σ = 16 px splats, duration weighting, per-subject
