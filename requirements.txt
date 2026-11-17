@@ -1,0 +1,16 @@
+# torch / torchvision: install the CUDA build for your platform first (see README §1).
+accelerate
+fvcore
+astunparse
+albumentations
+omegaconf
+pycocotools
+terminaltables
+tensorboard
+iopath
+ninja
+opencv-python
+scipy
+tqdm
+tabulate
+Pillow
