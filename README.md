@@ -126,24 +126,27 @@ python tools/convert_dota15_to_coco.py \
 (per-tile DOTA txt → unclipped polygon bounding boxes, 16 classes,
 `category_id` 1–16 with index 0 reserved following the DETR/COCO convention).
 
-#### 2.2 Gaze data — AerialGaze-1.0 (not shipped with this repository)
+#### 2.2 Gaze data — AerialGaze-1.0 (not publicly available)
 
-> **The eye-tracking data is not included in this repository.** Raw recordings
-> and derived density maps are several hundred MB, so a fresh clone contains no
-> `data/` directory. Each experiment below states which generated directory it
-> expects; how to obtain/rebuild that directory is described here.
+> **The eye-tracking data is not included in this repository and is not publicly
+> released.** Raw recordings and derived density maps are several hundred MB, so a
+> fresh clone contains no `data/` directory. Each experiment below states which
+> generated directory it expects; how to rebuild that directory from your own
+> gaze recordings is described here.
 
-The dataset is released separately (de-identified, CC BY 4.0 — link coming soon).
-Unpack it next to the code. The release contains **eye-tracking records only**;
-no DOTA imagery is redistributed:
+AerialGaze-1.0 was collected for internal research use only and is **not
+distributed**. Because the recordings were acquired without a formal
+ethics-review approval, we cannot redistribute either the raw eye-tracking
+records or the derived density maps. This repository documents the expected
+layout and the scripts that turn gaze records into density maps, so the pipeline
+can be reproduced with user-collected gaze data. For reference, the internal
+layout is:
 
 ```
-AerialGaze-1.0/
+AerialGaze-1.0/                       # internal layout only; not distributed
 ├── README.md
-├── LICENSE                          # CC BY 4.0
 ├── trials.csv                       # one row per trial: participant/task/class/stem/path
 ├── stats.json                       # aggregate counts (trials, fixations, sessions)
-├── SHA256SUMS.txt                   # checksums of every file
 ├── P001/
 │   ├── search/<class>/<stem>.json       # 1,800 target-search trials
 │   └── free_viewing/<stem>.json         # 200 free-viewing trials
@@ -179,18 +182,25 @@ Tobii screen-based eye tracker (30 Hz sampling). The acquisition protocol was:
    grid, so coordinates are directly comparable with DOTA annotations without
    any rescaling.
 6. **De-identification** — only anonymous participant codes are stored; no
-   demographic or face data is released.
+   demographic, face, or stimulus data is distributed.
+
+No formal ethics-review approval was obtained for public redistribution of these
+recordings, so neither the raw 30 Hz samples nor the derived density maps are
+released. The data were used solely for the internal experiments reported in the
+paper.
 
 The training signal is **not** the fixation list itself but a Gaussian-splatted
 density map built from these JSONs with `tools/build_gaze_density.py` (§2.4).
-For the released recordings this yields 1,800 maps (9 classes × 200).
+For our internal recordings this yields 1,800 maps (9 classes × 200).
 
 #### 2.3 Rebuild the stimulus tiles and merge them into the detection train set
 
-The release ships no images, so first reconstruct the 1,800 search stimuli from
-your DOTA-1.5 split. `trials.csv` lists the required `class` and `stem` of every
-trial; save the snippet below as `make_stimuli.py` and run it once (it accepts
-both `<stem>.jpg` and the mmrotate name `<src>__1024__<x>___<y>.jpg`):
+The repository ships no images and no gaze records. If you have your own gaze
+trials aligned to DOTA tile stems, list them in a `trials.csv` with the same
+columns (`participant/task/class/stem/path`) and reconstruct the corresponding
+stimuli from your DOTA-1.5 split. Save the snippet below as `make_stimuli.py` and
+run it once (it accepts both `<stem>.jpg` and the mmrotate name
+`<src>__1024__<x>___<y>.jpg`):
 
 ```python
 import csv, re, shutil
