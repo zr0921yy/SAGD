@@ -139,8 +139,11 @@ distributed**. Because the recordings were acquired without a formal
 ethics-review approval, we cannot redistribute either the raw eye-tracking
 records or the derived density maps. This repository documents the expected
 layout and the scripts that turn gaze records into density maps, so the pipeline
-can be reproduced with user-collected gaze data. For reference, the internal
-layout is:
+can be reproduced with user-collected gaze data. The acquisition and
+preprocessing pipeline itself (stimulus presentation, Tobii recording,
+coordinate transform, cleaning, and I-DT fixation detection) is released
+separately at [AerialGaze-pipeline](https://github.com/zr0921yy/AerialGaze-pipeline).
+For reference, the internal layout is:
 
 ```
 AerialGaze-1.0/                       # internal layout only; not distributed
@@ -184,10 +187,14 @@ Tobii screen-based eye tracker (30 Hz sampling). The acquisition protocol was:
 6. **De-identification** — only anonymous participant codes are stored; no
    demographic, face, or stimulus data is distributed.
 
-No formal ethics-review approval was obtained for public redistribution of these
-recordings, so neither the raw 30 Hz samples nor the derived density maps are
-released. The data were used solely for the internal experiments reported in the
-paper.
+All participants were members of the author team and provided written informed
+consent before participation; the collection procedure follows the principles
+of the Declaration of Helsinki. Because the authors' institution does not have
+an institutional review board, no formal ethical review was available; the data
+are minimal-risk behavioral records (fixation locations without video or
+identity information). Neither the raw 30 Hz samples nor the derived density
+maps are released, and the data were used solely as training-time supervision
+for the experiments reported in the paper.
 
 The training signal is **not** the fixation list itself but a Gaussian-splatted
 density map built from these JSONs with `tools/build_gaze_density.py` (§2.4).
