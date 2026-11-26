@@ -20,6 +20,7 @@ class SalienceCriterion(nn.Module):
         gaze_lambda: float = 0.5,
         sel_ratio_pool: Tuple = None,
         sel_tau_frac: float = 0.10,
+        sel_weight_space: str = "target",
     ):
         super().__init__()
         self.limit_range = limit_range
@@ -33,6 +34,18 @@ class SalienceCriterion(nn.Module):
         #    不改变损失量级）。None = 关闭（臂1/3 原行为，逐位一致）。
         self.sel_ratio_pool = sel_ratio_pool
         self.sel_tau_frac = sel_tau_frac
+        # Ranking space of the selection-aware boundary weighting.
+        #   "target" = rank tokens by the supervision target T (default; used by
+        #     all main experiments). The gaze component reshapes the ordering,
+        #     so the boundary band follows the gaze-informed priority.
+        #   "pred"   = deployment-exact variant: rank by the predicted foreground
+        #     score s, the same ordering that deployment top-k applies. Used by
+        #     the 2x2 attribution study, where the band must stay invariant to
+        #     the target source so that the two attribution factors remain
+        #     orthogonal.
+        if sel_weight_space not in ("target", "pred"):
+            raise ValueError(f"sel_weight_space must be 'target' or 'pred', got {sel_weight_space!r}")
+        self.sel_weight_space = sel_weight_space
 
     def forward(self, foreground_mask, targets, feature_strides, image_sizes,
                 gaze_lambda: float = 0.5):
@@ -100,11 +113,17 @@ class SalienceCriterion(nn.Module):
         sel_weights = None
         if self.sel_ratio_pool:
             r = self.sel_ratio_pool[int(torch.randint(len(self.sel_ratio_pool), (1,)).item())]
+            # "pred" ranks by the (detached) predicted foreground score -- the
+            # deployment-exact variant; "target" (default) ranks by the
+            # supervision target. detach() keeps the weighting path from
+            # back-propagating into the scoring head.
+            rank_source = (foreground_mask.detach()
+                           if self.sel_weight_space == "pred" else mask_targets)
             sel_weights = []
             start = 0
             for size in level_sizes:
                 sel_weights.append(
-                    self._boundary_weights(mask_targets[:, start:start + size], r,
+                    self._boundary_weights(rank_source[:, start:start + size], r,
                                            tau_frac=self.sel_tau_frac))
                 start += size
             sel_weights = torch.cat(sel_weights, dim=1)
@@ -125,9 +144,14 @@ class SalienceCriterion(nn.Module):
 
     @staticmethod
     def _boundary_weights(tgt, ratio: float, tau_frac: float = 0.10):
-        """选择感知边界加权（臂5-v2）：按混合目标降序排名，在部署截断点
-        k = T·ratio 附近放指数核权重峰（半宽 tau = 0.10·k），行均值归一 →
-        只改监督重点不改损失量级。目标为 0 的 token（含 pad）排名靠后，权重趋零。"""
+        """Selection-aware boundary weighting: rank tokens in descending order
+        of the given rank source (the supervision target by default, or the
+        predicted foreground score in the deployment-exact variant), place a
+        Laplacian weight peak at the deployment truncation point k = T·ratio
+        (half-width tau = 0.10·k), and normalize by the row mean, so only the
+        supervision focus changes while the loss magnitude is preserved.
+        Tokens with zero target (including padding) rank last and receive
+        near-zero weight."""
         B, T = tgt.shape
         k = min(max(float(T) * min(max(ratio, 0.01), 1.0), 1.0), float(T))
         order = tgt.argsort(dim=1, descending=True)
