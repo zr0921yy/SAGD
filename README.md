@@ -343,6 +343,18 @@ python main.py --config-file configs/train_config_selaware.py --seed 42
 # and configs/train_config_convnext_t_selaware.py instead.
 ```
 
+**Ranking-space variants.** All main experiments use the default target-ranking
+boundary weighting (`sel_weight_space="target"`: tokens are ranked by the
+supervision target, so the boundary band follows the gaze-informed priority).
+The 2x2 attribution study in the paper uses the deployment-exact variant
+(`sel_weight_space="pred"`: tokens are ranked by the predicted foreground
+score, the ordering that deployment top-k applies); the variant is required
+there so that the target-source factor and the weighting factor stay
+orthogonal. See `configs/salience_detr/salience_detr_resnet50_dota15_attrib.py`
+and `salience_detr_convnext_t_dota15_attrib.py`, which expose all four
+attribution arms through the `GAZE_DIR` / `SEL_POOL` / `SEL_WEIGHT_SPACE` /
+`GAZE_LAMBDA` environment variables.
+
 To resume an interrupted run, point `RESUME_FROM` at the run directory:
 
 ```bash
